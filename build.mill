@@ -1,0 +1,9 @@
+import mill._, scalalib._
+
+object aoc2024 extends ScalaModule {
+    def scalaVersion = "3.5.2"
+    def ivyDeps = Agg(
+        ivy"com.lihaoyi::os-lib:0.11.3"
+    )
+}
+
