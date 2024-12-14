@@ -1,6 +1,5 @@
 import os._
 import scala.collection.{mutable => mu}
-import day08.posMap
 
 object day12 {
 
