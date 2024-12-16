@@ -6,12 +6,12 @@ import scala.annotation.tailrec
 
 object day16 {
 
-  val test       = true
+  val test       = false
   val printstuff = test
 
   val filePath = {
     if (test) {
-      os.resource / "day16_sample2.txt"
+      os.resource / "day16_sample.txt"
     } else {
       os.resource / "day16.txt"
     }
@@ -23,6 +23,7 @@ object day16 {
     def pos: Pos
   }
   case class Pos(x: Int, y: Int)
+  case class EPos(x: Int, y: Int, vertical: Boolean)
 
   case class Wall(val pos: Pos)  extends MapObject
   case class Start(val pos: Pos) extends MapObject
@@ -84,17 +85,17 @@ object day16 {
 
   def visitNeigh(
       cost: Int,
-      pos: Pos,
+      pos: EPos,
       vertical: Boolean,
       matrix: Vector[Vector[Option[MapObject]]],
-      visited: Map[Pos, List[Pos]],
-      queue: PriorityQueue[(Int, (Pos, Boolean, Pos))],
+      visited: Map[EPos, List[EPos]],
+      queue: PriorityQueue[(Int, (EPos, Boolean, EPos))],
   ): Int = {
 
-    val up    = pos.copy(y = pos.y - 1)
-    val down  = pos.copy(y = pos.y + 1)
-    val right = pos.copy(x = pos.x + 1)
-    val left  = pos.copy(x = pos.x - 1)
+    val up    = pos.copy(y = pos.y - 1, vertical = true)
+    val down  = pos.copy(y = pos.y + 1, vertical = true)
+    val right = pos.copy(x = pos.x + 1, vertical = false)
+    val left  = pos.copy(x = pos.x - 1, vertical = false)
 
     enq(up, matrix, queue, true, !vertical, cost, pos)
     enq(down, matrix, queue, true, !vertical, cost, pos)
@@ -107,19 +108,22 @@ object day16 {
   @tailrec
   def rec(
       matrix: Vector[Vector[Option[MapObject]]],
-      visited: Map[Pos, List[Pos]],
-      costMap: Map[Pos, Int],
-      queue: PriorityQueue[(Int, (Pos, Boolean, Pos))],
+      visited: Map[EPos, List[EPos]],
+      costMap: Map[EPos, Int],
+      queue: PriorityQueue[(Int, (EPos, Boolean, EPos))],
   ): Int = {
     if (queue.isEmpty) {
       return 0
     }
     val (cost, (pos, vertical, prevPos)) = queue.dequeue()
     val cur                              = matrix(pos.y)(pos.x)
+
+    if (pos == EPos(15, 6, true)) {
+      // println("cross")
+    }
+
     if (visited.contains(pos)) {
       val c = costMap(pos)
-      if(pos ==Pos(15,6))
-       println("cross")
       if (c == cost) {
         val nvisited = visited + (pos -> (prevPos +: visited.getOrElse(pos, List.empty)))
         return rec(matrix, nvisited, costMap, queue)
@@ -127,6 +131,16 @@ object day16 {
         return rec(matrix, visited, costMap, queue)
       }
     }
+    /*
+    println("==========================")
+    val x = matrix.map(_.toArray).toArray
+    x(pos.y)(pos.x) = Some(Start(Pos(pos.y, pos.x)))
+    val v = x.map(_.toVector).toVector
+    printMap(v)
+    println(cost)
+    println("==========================")
+
+     */
     cur match
       case Some(value) => {
         value match
@@ -135,9 +149,10 @@ object day16 {
             0
           }
           case Start(pos) => {
-            val nvisited = visited + (pos -> (prevPos +: visited.getOrElse(pos, List.empty)))
-            val nCost    = costMap + (pos -> cost)
-            visitNeigh(cost, pos, vertical, matrix, nvisited, queue)
+            val curPos   = EPos(pos.x, pos.y, vertical)
+            val nvisited = visited + (curPos -> (prevPos +: visited.getOrElse(curPos, List.empty)))
+            val nCost    = costMap + (curPos -> cost)
+            visitNeigh(cost, curPos, vertical, matrix, nvisited, queue)
             return rec(matrix, nvisited, nCost, queue)
           }
           case End(pos) => {
@@ -145,17 +160,23 @@ object day16 {
             println("==========================")
             val x = matrix.map(_.toArray).toArray
 
-            var prev: Pos = prevPos
-            var foc: Pos  = visited.getOrElse(prev, List(prev)).head
+            var prev: EPos = prevPos
+            var foc: EPos  = visited.getOrElse(prev, List(prev)).head
             // println(visited)
             while (prev != foc) {
               x(foc.y)(foc.x) = Some(Start(pos))
               prev = foc
-              foc = visited.getOrElse(prev, List(prev)).head
+              val ll = visited.getOrElse(prev, List(prev))
+              if (ll.size > 1) {
+                x(foc.y)(foc.x) = Some(End(pos))
+              }
+              foc = ll.head
             }
             val v = x.map(_.toVector).toVector
             printMap(v)
             println(cost)
+            val cset = count(prevPos,visited,Set.empty)
+            println(cset.size+2)
             println("==========================")
             cost
           }
@@ -163,22 +184,43 @@ object day16 {
       }
       case None => {
 
-        val nvisited = visited + (pos -> (prevPos +: visited.getOrElse(pos, List.empty)))
-        val nCost    = costMap + (pos -> cost)
+        val curPos   = EPos(pos.x, pos.y, vertical)
+        val nvisited = visited + (curPos -> (prevPos +: visited.getOrElse(curPos, List.empty)))
+        val nCost    = costMap + (curPos -> cost)
         visitNeigh(cost, pos, vertical, matrix, nvisited, queue)
         return rec(matrix, nvisited, nCost, queue)
       }
   }
 
+  def count(cur: EPos, 
+      visited: Map[EPos, List[EPos]],
+      countset: Set[Pos]
+  ): Set[Pos] = {
+    val next = visited.get(cur)
+    next match
+        case None => {
+            assert(false)
+            Set.empty 
+        }
+        case Some(value) =>{
+            if(value.head == cur)
+                countset
+            else{
+               countset ++ value.map( prev => count(prev, visited,  Set(Pos(cur.x, cur.y)))).reduce( (a,b)=> a ++ b) 
+            }
+        }
+     
+  }
+
   @inline
   def enq(
-      pos: Pos,
+      pos: EPos,
       matrix: Vector[Vector[Option[MapObject]]],
-      queue: PriorityQueue[(Int, (Pos, Boolean, Pos))],
+      queue: PriorityQueue[(Int, (EPos, Boolean, EPos))],
       isVertical: Boolean,
       isTurn: Boolean,
       curCost: Int,
-      prevPos: Pos,
+      prevPos: EPos,
   ) = {
     val ele = matrix(pos.y)(pos.x)
     ele match
@@ -192,7 +234,7 @@ object day16 {
         value match
           case Wall(pos)  =>
           case Start(pos) =>
-          case End(pos) =>
+          case e: End =>
             if (isTurn) {
               queue.addOne(((curCost + 1000 + 1), (pos, isVertical, prevPos)))
             } else {
@@ -203,11 +245,13 @@ object day16 {
 
   @main
   def day16_01(): Unit = {
-    implicit val ordering: Ordering[(Int, (Pos, Boolean, Pos))] = Ordering.by[(Int, (Pos, Boolean, Pos)), Int](-_._1)
-    val (start, matrix)                                         = readInput()
-    val minHeap                                                 = PriorityQueue.empty[(Int, (Pos, Boolean, Pos))]
+    implicit val ordering: Ordering[(Int, (EPos, Boolean, EPos))] = Ordering
+      .by[(Int, (EPos, Boolean, EPos)), Int](-_._1)
+    val (start, matrix) = readInput()
+    val minHeap         = PriorityQueue.empty[(Int, (EPos, Boolean, EPos))]
     printMap(matrix)
-    val res = rec(matrix, Map.empty, Map.empty, minHeap.addOne(0, (start.pos, false, start.pos)))
+    val estart = EPos(start.pos.x, start.pos.y, false)
+    val res    = rec(matrix, Map.empty, Map.empty, minHeap.addOne(0, (estart, false, estart)))
     println(res)
   }
 
