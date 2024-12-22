@@ -36,9 +36,7 @@ object day19 {
   }
 
   def createRegex(substrings: Vector[String]): Regex = {
-    // Create a regex pattern that matches any of the substrings
     val pattern = substrings.map(Regex.quote).mkString("|")
-    // Use the pattern to check if the entire string can be matched
     val regex = s"^($pattern)*$$".r
     regex
   }
@@ -64,7 +62,6 @@ object day19 {
       .map(p => {
         if (regex.matches(p)) {
           val nr = nrOfWays(p, stringset)
-          //println(nr)
           nr
         } else {
           0L
@@ -96,7 +93,6 @@ object day19 {
       
       cache(i) = perm 
     }
-    //println(cache.last)
     cache.last
   }
 
