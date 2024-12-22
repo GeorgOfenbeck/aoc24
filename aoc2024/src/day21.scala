@@ -105,7 +105,6 @@ object day21 {
 
   object NumPad {
     def gotoVariants(from: NumPad, to: NumPad): Vector[Vector[DPad]] = {
-
       def rec(cur: Pos, to: Pos, path: Vector[DPad]): Vector[Vector[DPad]] = {
         if (cur == to) {
           return Vector(path :+ DA)
@@ -192,7 +191,12 @@ object day21 {
 
   }
   object DPad {
+
+    val gotoVCache: mu.Map[(DPad, DPad), Vector[Vector[DPad]]] = mu.Map.empty
     def gotoVariants(from: DPad, to: DPad): Vector[Vector[DPad]] = {
+      if(gotoVCache.contains((from, to))) {
+        return gotoVCache((from, to))
+      }
       def rec(cur: Pos, to: Pos, path: Vector[DPad]): Vector[Vector[DPad]] = {
         if (cur == to) {
           return Vector(path :+ DA)
@@ -231,10 +235,18 @@ object day21 {
 
         vert ++ horiz
       }
-      rec(from.pos, to.pos, Vector.empty)
+      val res = rec(from.pos, to.pos, Vector.empty)
+      gotoVCache((from, to)) = res
+      res
     }
 
-    def goto(from: DPad, to: DPad): List[DPad] = {
+
+
+    val gotoCache: mu.Map[(DPad, DPad), Vector[DPad]] = mu.Map.empty
+    def goto(from: DPad, to: DPad): Vector[DPad] = {
+      if (gotoCache.contains((from, to))) {
+        return gotoCache((from, to))
+      }
       var l   = List.empty[DPad]
       var cur = from.pos
 
@@ -258,10 +270,12 @@ object day21 {
       }
 
       if (cur == to.pos) {
-        return DA +: l
+        val res = (DA +: l).toVector
+        gotoCache((from, to)) = res
+        return res
       } else {
         assert(false)
-        return l
+        return l.toVector
       }
     }
 
@@ -273,7 +287,7 @@ object day21 {
       Pos(0, 2) -> DA,
     )
   }
-
+  
   def num2DpadVariants(input: Vector[NumPad]): Vector[Vector[DPad]] = {
     val ini: (Vector[Vector[DPad]], NumPad) = (Vector.empty, NrA)
     val (translation, _) = {
@@ -388,6 +402,56 @@ object day21 {
     res
   }
 
+  val costCache2: mu.Map[(NumPad, NumPad, Long), Long] = mu.Map.empty
+  def get_cost(a: NumPad, b: NumPad, depth: Long): Long = {
+    if(costCache2.contains((a,b,depth))) {
+      return costCache2((a,b,depth))
+    }
+    if(depth == 0) {
+      NumPad.gotoVariants(a,b).map(x => x.size).min
+    } else{
+      val variants = NumPad.gotoVariants(a, b)
+      val min_cost = variants.map(seq2 => {
+        val seq = DA +: seq2 
+        var cost = 0L
+        for (i <- 0 until seq.size - 1) {
+          val a = seq(i)
+          val b = seq(i + 1)
+          cost = cost + get_cost(a, b, depth - 1)
+        }
+        cost
+      }).min
+      min_cost
+    }
+  }
+
+
+  val costCache: mu.Map[(DPad, DPad, Long), Long] = mu.Map.empty
+  def get_cost(a: DPad, b: DPad, depth: Long): Long = {
+    if(costCache.contains((a,b,depth))) {
+      return costCache((a,b,depth))
+    }
+    if(depth == 0) {
+      val mins = DPad.gotoVariants(a,b).map(x => x.size).min
+      mins
+    } else{
+      val variants = DPad.gotoVariants(a, b)
+      val min_cost = variants.map(seq2 => {
+        val seq = DA +: seq2
+        var cost = 0L
+        for (i <- 0 until seq.size - 1) {
+          val a = seq(i)
+          val b = seq(i + 1)
+          cost = cost + get_cost(a, b, depth - 1)
+        }
+        cost
+      }).min
+      costCache((a,b,depth)) = min_cost
+      min_cost
+    }
+  }
+
+
   def char2Numpad(c: Char): NumPad = {
     c match {
       case '7' =>
@@ -429,61 +493,30 @@ object day21 {
     }
   }
 
+  def get_code_cost(code: Vector[NumPad], depth: Int): Long = {
+    val res = code.sliding(2).map { case Vector(a, b) => get_cost(a, b, depth).toLong }.sum
+    res
+  }
+
+  @main
+  def day21_02(): Unit = {
+
+    val numpadInputs = inputCharVecs.map(row => row.map(x => char2Numpad(x)))
+    val prepend = numpadInputs.map(x => NrA +: x)
+    prepend.foreach(x => println(x))
+
+    //get_code_cost(prepend.head,1)
+    val sizes =prepend.map(numpad => get_code_cost(numpad,25))
+    
+    val complexity2 = sizes.zip(inputNums).map(x => x._1 * x._2.toLong).sum
+    println(complexity2)
+  }
+
   @main
   def day21_01(): Unit = {
     inputStrings.foreach(println(_))
     val numpadInputs = inputCharVecs.map(row => row.map(x => char2Numpad(x)))
 
-    /*
-    val robotDoor    = numpadInputs.map(numpad => num2Dpad(numpad))
-    val robot1       = robotDoor.map(dpad => dpadEncode(dpad))
-    val robot2       = robot1.map(dpad => dpadEncode(dpad))
-
-    println(robot2.map(x => x.size))
-    println(inputNums)
-    val complexity = robot2.map(x => x.size).zip(inputNums).map(x => x._1 * x._2).sum
-    println(complexity)
-
-    // (Vector(DUp, DDown, DLeft, DRight, DA)).map(x => dpadEncode(Vector(x))).map(println(_))
-
-    val testInput  = "<v<A>>^AvA^A<vA<AA>>^AAvA<^A>AAvA^A<vA>^AA<A>A<v<A>A>^AAAvA<^A>A"
-    val testDpad   = testInput.toCharArray.toVector.map(x => dir2Dpad(x))
-    val testDpad1  = dpadDecode(testDpad)
-    val testDpad2  = dpadDecode(testDpad1)
-    val testNumPad = dpad2Num(testDpad2)
-    println("=====================")
-    println(testNumPad)
-    println(numpadInputs.last)
-
-    println("=====================")
-    println(testDpad2)
-    println(robotDoor.last)
-
-    println("=====================")
-    println(testDpad1)
-    println(robot1.last)
-
-    println("=====================")
-    println(testDpad)
-    println(robot2.last)
-
-    println("=====================")
-    val check     = "<, A, >, A, <, A, A, v, <, A, A, >, >, ^, A, v, A, A, ^, A, v, <, A, A, A, >, ^, A"
-    val checkPad  = check.split(", ").toVector.map(x => dir2Dpad(x.head))
-    val checkPad2 = dpadEncode(checkPad)
-    println(checkPad2)
-
-    println("variants =====================")
-    NumPad
-      .gotoVariants(Nr5, NrA)
-      .map { x =>
-        println(x)
-      }
-    println("variant Comb =====================")
-    println(numpadInputs.head)
-
-    val numIn = numpadInputs.head
-     */
     val sizes = numpadInputs.map(x => {
       val res = num2DpadVariants(x).flatMap { num2Dpad =>
         pad2padVariants(num2Dpad).flatMap { pad2pad =>
@@ -541,7 +574,8 @@ object day21 {
 
   def createLeafs(pad: Vector[DPad], idsofar: String, depth: Int): List[TreeNode] = {
     val vars = pad2padVariants(pad)
-      vars.zipWithIndex
+    vars
+      .zipWithIndex
       .map { (pad2pad2, id2) =>
         {
           if (depth == 0) {
@@ -552,28 +586,36 @@ object day21 {
             TreeNode(s"${idsofar}_${id2}", createLeafs(pad2pad2, s"${idsofar}_${id2}", depth - 1))
           }
         }
-      }.toList
+      }
+      .toList
 
   }
 
   @main
   def day21_exploreDPad(): Unit = {
-    //val allDaps = Vector(DDown, DUp, DLeft, DRight)
+    // val allDaps = Vector(DDown, DUp, DLeft, DRight)
     val allDaps = Vector(DLeft)
     val seq     = allDaps.map(nr => Vector(nr, DA))
     seq.map(x => {
-      val children = createLeafs(x, "",1)
+      val children = createLeafs(x, "", 1)
 
       // Your existing code to generate the tree
       val root = TreeNode("root", children.toList)
       // Generate DOT file
-      val filename = x.head match
-        case DUp => "up"
-        case DDown => "down"
-        case DLeft => "left"
-        case DRight => "right"
-        case DA => "a"
-      
+      val filename = {
+        x.head match
+          case DUp =>
+            "up"
+          case DDown =>
+            "down"
+          case DLeft =>
+            "left"
+          case DRight =>
+            "right"
+          case DA =>
+            "a"
+      }
+
       generateDotFile(root, s"${filename}.dot")
     })
   }
